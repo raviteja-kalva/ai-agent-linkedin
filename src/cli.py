@@ -2,67 +2,59 @@ import argparse
 import asyncio
 from typing import Optional
 from rich import print as rprint
-from .config import load_config, validate_or_default_url
-from .automation import (
+from .config import load_config
+from .automation_clean import (
 	launch_browser,
-	open_home_and_login,
-	open_url,
-	search_jobs,
-	apply_left_nav_filters,
-	collect_first_job_and_apply,
+	open_linkedin_and_login,
+	navigate_to_jobs,
+	apply_filters,
+	find_and_apply_to_first_job,
 )
+from .search_simple import search_jobs_simple
 from .report import write_excel_report
-from .mailer import send_email_with_attachment
 
 
 def parse_args() -> argparse.Namespace:
-	parser = argparse.ArgumentParser(description="Naukri automation agent")
-	parser.add_argument("--url", type=str, required=False, help="Naukri search URL (optional)")
+	parser = argparse.ArgumentParser(description="LinkedIn job automation agent")
 	parser.add_argument("--headful", action="store_true", help="Run browser in headed mode")
 	parser.add_argument("--timeout", type=int, default=30000, help="Per action timeout in ms")
 	return parser.parse_args()
 
 
-async def main_async(url_override: Optional[str], headful: bool, timeout_ms: int) -> int:
+async def main_async(headful: bool, timeout_ms: int) -> int:
 	cfg = load_config()
 	cfg.headless = not headful
 	cfg.action_timeout_ms = timeout_ms
 
 	async with launch_browser(headless=cfg.headless) as (browser, context):
-		page = await open_home_and_login(context, cfg.naukri_email, cfg.naukri_password)
-		await search_jobs(page, "Product Manager")
-		await apply_left_nav_filters(page)
-		job = await collect_first_job_and_apply(page)
+		# Step 1: Login to LinkedIn
+		page = await open_linkedin_and_login(context, cfg.linkedin_email, cfg.linkedin_password)
+		
+		# Step 2: Navigate to Jobs
+		await navigate_to_jobs(page)
+		
+		# Step 3: Search for jobs (skip this step as we'll navigate directly to the jobs page)
+		# await search_jobs_simple(page, "Product Manager", "India")
+		
+		# Step 4: Apply filters
+		await apply_filters(page)
+		
+		# Step 5: Apply to first job
+		job = await find_and_apply_to_first_job(page)
 		rprint(f"[bold]Applied to:[/bold] {job}")
 
+		# Generate report
 		report_path = write_excel_report(job)
 		rprint(f"[bold green]Report:[/bold green] {report_path}")
-
-		# Conditionally send email if SMTP is configured
-		smtp = cfg.smtp
-		if smtp.mail_from and smtp.mail_to and smtp.username and smtp.password:
-			try:
-				send_email_with_attachment(
-					smtp,
-					subject="Naukri Applied Job Report",
-					body="Attached is the Excel report for the applied job.",
-					attachment=report_path,
-				)
-				rprint("[bold blue]Email sent successfully[/bold blue]")
-			except Exception as e:
-				rprint(f"[bold red]Email skipped due to error:[/bold red] {e}")
-		else:
-			rprint("[yellow]SMTP not configured. Skipping email step.[/yellow]")
 
 	return 0
 
 
 def main() -> None:
 	args = parse_args()
-	code = asyncio.run(main_async(args.url, args.headful, args.timeout))
+	code = asyncio.run(main_async(args.headful, args.timeout))
 	exit(code)
 
 
 if __name__ == "__main__":
 	main()
-
