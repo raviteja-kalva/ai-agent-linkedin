@@ -34,6 +34,108 @@ async def debug_screenshot(page: Page, name: str) -> None:
 		print(f"[DEBUG] Failed to take screenshot: {e}")
 
 
+async def wait_for_captcha_completion(page: Page) -> None:
+	"""Wait for user to manually complete CAPTCHA verification"""
+	print(f"[DEBUG] Checking for CAPTCHA verification...")
+	
+	# Common CAPTCHA indicators
+	captcha_selectors = [
+		"iframe[src*='captcha']",
+		"iframe[src*='recaptcha']",
+		"[data-testid*='captcha']",
+		".captcha",
+		"#captcha",
+		"[class*='captcha']",
+		"iframe[title*='captcha']",
+		"iframe[title*='reCAPTCHA']",
+		"iframe[src*='hcaptcha']",
+		".h-captcha"
+	]
+	
+	# Check if CAPTCHA is present
+	captcha_found = False
+	for selector in captcha_selectors:
+		try:
+			element = page.locator(selector)
+			if await element.count() > 0:
+				captcha_found = True
+				print(f"[DEBUG] CAPTCHA found with selector: {selector}")
+				break
+		except Exception:
+			continue
+	
+	# Also check for common CAPTCHA text patterns
+	try:
+		page_content = await page.content()
+		captcha_text_indicators = [
+			"captcha", "recaptcha", "hcaptcha", "verify you are human", 
+			"security check", "robot verification", "prove you're not a robot"
+		]
+		for indicator in captcha_text_indicators:
+			if indicator.lower() in page_content.lower():
+				captcha_found = True
+				print(f"[DEBUG] CAPTCHA text found: {indicator}")
+				break
+	except Exception:
+		pass
+	
+	if captcha_found:
+		print(f"[INFO] CAPTCHA detected! Please solve it manually in the browser.")
+		print(f"[INFO] The automation will wait for you to complete the verification...")
+		
+		# Wait for CAPTCHA to be completed (check for successful login indicators)
+		max_wait_time = 300  # 5 minutes
+		check_interval = 3   # Check every 3 seconds
+		waited_time = 0
+		
+		while waited_time < max_wait_time:
+			# Check if we're successfully logged in (look for LinkedIn feed or profile elements)
+			success_indicators = [
+				"[data-testid='main-feed']",
+				"[data-testid='feed']",
+				".feed-container",
+				"[data-testid='global-nav']",
+				".global-nav",
+				"[data-testid='profile-nav-item']",
+				".profile-nav-item",
+				"#main-content",
+				".main-content",
+				"[data-testid='home']",
+				".home",
+				"nav[role='navigation']",
+				".global-nav__me",
+				"[data-testid='me-icon']"
+			]
+			
+			# Check current URL to see if we're on LinkedIn home
+			current_url = page.url
+			if "linkedin.com/feed" in current_url or "linkedin.com/in/" in current_url:
+				print(f"[SUCCESS] Successfully navigated to LinkedIn home/feed!")
+				return
+			
+			for indicator in success_indicators:
+				try:
+					element = page.locator(indicator)
+					if await element.count() > 0:
+						print(f"[SUCCESS] CAPTCHA completed! Login successful. Found: {indicator}")
+						return
+				except Exception:
+					continue
+			
+			await asyncio.sleep(check_interval)
+			waited_time += check_interval
+			
+			if waited_time % 30 == 0:  # Print status every 30 seconds
+				print(f"[INFO] Still waiting for CAPTCHA completion... ({waited_time}s elapsed)")
+				print(f"[DEBUG] Current URL: {page.url}")
+		
+		print(f"[WARNING] Timeout waiting for CAPTCHA completion. Continuing anyway...")
+	else:
+		print(f"[DEBUG] No CAPTCHA detected, continuing with automation...")
+		# Even if no CAPTCHA detected, wait a bit for page to stabilize
+		await asyncio.sleep(3)
+
+
 async def first_locator(page: Page, selectors: list[str], timeout: float = 6000):
 	"""Find the first available element from a list of selectors"""
 	for sel in selectors:
@@ -109,6 +211,9 @@ async def open_linkedin_and_login(context: BrowserContext, email: str, password:
 	
 	# Take screenshot after login attempt
 	await debug_screenshot(page, "after_login_attempt")
+	
+	# Check for CAPTCHA and wait for manual completion
+	await wait_for_captcha_completion(page)
 	
 	print(f"[DEBUG] Login process completed")
 	return page
