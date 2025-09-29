@@ -178,14 +178,46 @@ location_selectors: List[str] = [
 
 # Apply button selectors
 apply_button_selectors: List[str] = [
-	"css=button:has-text('Easy Apply')",
-	"css=button:has-text('Apply')",
-	"css=.jobs-apply-button",
-	"css=button[data-control-name='jobdetails_topcard_inapply']",
-	"css=button[aria-label*='Easy Apply']",
-	"css=button[aria-label*='Apply']",
-	"css=.jobs-unified-top-card__apply-button",
-	"css=button:has-text('Quick apply')",
+	# SPECIFIC TO JOB DESCRIPTION PANEL ONLY - avoid filter buttons
+	"css=.jobs-unified-top-card__apply-button:has-text('Easy Apply')",
+	"css=.jobs-unified-top-card__apply-button:has-text('Apply')",
+	"css=.jobs-apply-button:has-text('Easy Apply')",
+	"css=.jobs-apply-button:has-text('Apply')",
+	"css=button[data-control-name='jobdetails_topcard_inapply']:has-text('Easy Apply')",
+	"css=button[data-control-name='jobdetails_topcard_inapply']:has-text('Apply')",
+	"css=.jobs-unified-top-card__apply-button--full-width:has-text('Easy Apply')",
+	"css=.jobs-unified-top-card__apply-button--full-width:has-text('Apply')",
+	# Specific to job details panel
+	"css=.jobs-details__main-content button:has-text('Easy Apply')",
+	"css=.jobs-details__main-content button:has-text('Apply')",
+	"css=.jobs-details button:has-text('Easy Apply')",
+	"css=.jobs-details button:has-text('Apply')",
+	# More specific selectors for job panel
+	"css=.jobs-unified-top-card button:has-text('Easy Apply')",
+	"css=.jobs-unified-top-card button:has-text('Apply')",
+	"css=.jobs-apply-button--top-card:has-text('Easy Apply')",
+	"css=.jobs-apply-button--top-card:has-text('Apply')",
+	# Data attributes specific to job panel
+	"css=button[data-easy-apply-id]:has-text('Easy Apply')",
+	"css=button[data-easy-apply-id]:has-text('Apply')",
+	"css=button[data-control-name*='jobdetails']:has-text('Easy Apply')",
+	"css=button[data-control-name*='jobdetails']:has-text('Apply')",
+	# Aria labels specific to job panel
+	"css=button[aria-label*='Easy Apply']:has-text('Easy Apply')",
+	"css=button[aria-label*='Apply']:has-text('Apply')",
+	# Class-based selectors for job panel
+	"css=button[class*='jobs-apply-button']:has-text('Easy Apply')",
+	"css=button[class*='jobs-apply-button']:has-text('Apply')",
+	"css=button[class*='apply-button']:has-text('Easy Apply')",
+	"css=button[class*='apply-button']:has-text('Apply')",
+	# LinkedIn logo specific to job panel
+	"css=button:has-text('Easy Apply'):has(svg)",
+	"css=button:has-text('Easy Apply'):has(.linkedin-icon)",
+	"css=button:has-text('Easy Apply'):has(.icon)",
+	# Fallback - but only in job details area
+	"css=.jobs-unified-top-card *:has-text('Easy Apply')",
+	"css=.jobs-details *:has-text('Easy Apply')",
+	"css=.jobs-details__main-content *:has-text('Easy Apply')",
 ]
 
 # Modal/overlay selectors
@@ -193,22 +225,49 @@ modal_selectors: List[str] = [
 	"css=.jobs-easy-apply-modal",
 	"css=.jobs-apply-modal",
 	"css=[role='dialog']",
+	"css=.jobs-easy-apply-modal__content",
+	"css=.jobs-apply-modal__content",
+	"css=.modal-overlay",
+	"css=.jobs-easy-apply-modal__container",
+	"css=.jobs-apply-modal__container",
+	"css=.jobs-easy-apply-modal__form",
+	"css=.jobs-apply-modal__form",
+	"css=[data-test-id='easy-apply-modal']",
+	"css=[data-test-id='apply-modal']",
 ]
 
 next_button_selectors: List[str] = [
 	"css=button:has-text('Next')",
 	"css=button:has-text('Continue')",
 	"css=.jobs-easy-apply-modal__footer-button--next",
+	"css=button[aria-label*='Next']",
+	"css=button[aria-label*='Continue']",
+	"css=.jobs-easy-apply-modal__footer-button",
+	"css=button:has-text('Next step')",
+	"css=button:has-text('Continue to next step')",
+	"css=button[data-control-name='continue_unify']",
 ]
 
 submit_application_selectors: List[str] = [
 	"css=button:has-text('Submit application')",
 	"css=button:has-text('Submit')",
 	"css=.jobs-easy-apply-modal__footer-button--submit",
+	"css=button[aria-label*='Submit']",
+	"css=button:has-text('Submit your application')",
+	"css=button:has-text('Send application')",
+	"css=button[data-control-name='submit_unify']",
+	"css=button:has-text('Apply')",
+	"css=button:has-text('Complete application')",
 ]
 
 close_modal_selectors: List[str] = [
 	"css=button[aria-label='Dismiss']",
 	"css=button:has-text('×')",
 	"css=.jobs-easy-apply-modal__close-button",
+	"css=button[aria-label*='Close']",
+	"css=button[aria-label*='Dismiss']",
+	"css=button:has-text('Close')",
+	"css=button:has-text('Cancel')",
+	"css=.modal-close-button",
+	"css=button[data-control-name='dismiss_apply_modal']",
 ]

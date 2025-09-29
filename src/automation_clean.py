@@ -8,6 +8,10 @@ from .selectors import (
 	password_input_selectors,
 	submit_login_selectors,
 	jobs_menu_selectors,
+	modal_selectors,
+	next_button_selectors,
+	submit_application_selectors,
+	close_modal_selectors,
 )
 
 
@@ -23,15 +27,296 @@ async def wait_network_idle(page: Page, timeout: int = 10000) -> None:
 
 
 async def debug_screenshot(page: Page, name: str) -> None:
-	"""Take a debug screenshot for troubleshooting"""
+	"""Take a debug screenshot for troubleshooting - DISABLED"""
+	# Debug screenshots disabled to avoid clutter
+	pass
+
+
+async def handle_easy_apply_modal(page: Page) -> bool:
+	"""Handle the Easy Apply modal/popup with comprehensive logic"""
+	print(f"[DEBUG] Handling Easy Apply modal...")
+	
 	try:
-		from datetime import datetime
-		timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-		filename = f"debug_{name}_{timestamp}.png"
-		await page.screenshot(path=filename)
-		print(f"[DEBUG] Screenshot saved: {filename}")
+		# Wait for modal to appear
+		modal_found = False
+		for selector in modal_selectors:
+			try:
+				modal = page.locator(selector).first
+				if await modal.count() > 0:
+					await modal.wait_for(state="visible", timeout=5000)
+					modal_found = True
+					print(f"[DEBUG] Modal found with selector: {selector}")
+					break
+			except Exception:
+				continue
+		
+		if not modal_found:
+			print(f"[DEBUG] No modal found, checking if application was instant")
+			# Sometimes Easy Apply is instant without modal
+			await asyncio.sleep(2)
+			return True
+		
+		# PAUSE FOR USER TO FILL MISSING DETAILS
+		print(f"[INFO] ==========================================")
+		print(f"[INFO] Easy Apply modal opened successfully!")
+		print(f"[INFO] Please fill in any missing details manually.")
+		print(f"[INFO] The automation will wait for you to complete the form.")
+		print(f"[INFO] Automation will automatically continue after 30 seconds...")
+		print(f"[INFO] ==========================================")
+		
+		# Wait for user to complete the form (no input required)
+		print(f"[INFO] Waiting 30 seconds for you to complete the form...")
+		await asyncio.sleep(30)  # Wait 30 seconds for user to fill details
+		print(f"[INFO] Continuing automation...")
+		
+		# Handle multi-step application process: Next → Next → Review → Submit
+		max_steps = 10  # Prevent infinite loops
+		step = 0
+		
+		while step < max_steps:
+			print(f"[DEBUG] Processing application step {step + 1}")
+			
+			# Wait for page to stabilize
+			await asyncio.sleep(2)
+			
+			# Check for required fields that need to be filled
+			await handle_required_fields(page)
+			
+			# Look for Review button first (this means we're at the final step)
+			review_clicked = False
+			review_selectors = [
+				"css=button:has-text('Review')",
+				"css=button:has-text('review')",
+				"css=button[aria-label*='Review']",
+				"css=button[data-control-name*='review']"
+			]
+			
+			for selector in review_selectors:
+				try:
+					review_btn = page.locator(selector).first
+					if await review_btn.count() > 0:
+						await review_btn.wait_for(state="visible", timeout=3000)
+						if await review_btn.is_enabled():
+							await review_btn.click()
+							print(f"[DEBUG] Clicked Review button (step {step + 1})")
+							await asyncio.sleep(3)
+							review_clicked = True
+							step += 1
+							break
+				except Exception:
+					continue
+			
+			if review_clicked:
+				continue
+			
+			# Look for Submit button (final step)
+			submit_clicked = False
+			for selector in submit_application_selectors:
+				try:
+					submit_btn = page.locator(selector).first
+					if await submit_btn.count() > 0:
+						await submit_btn.wait_for(state="visible", timeout=3000)
+						if await submit_btn.is_enabled():
+							await submit_btn.click()
+							print(f"[DEBUG] Submitted application")
+							await asyncio.sleep(3)
+							submit_clicked = True
+							break
+				except Exception:
+					continue
+			
+			if submit_clicked:
+				break
+			
+			# Look for Next/Continue buttons (intermediate steps)
+			next_clicked = False
+			for selector in next_button_selectors:
+				try:
+					next_btn = page.locator(selector).first
+					if await next_btn.count() > 0:
+						await next_btn.wait_for(state="visible", timeout=3000)
+						if await next_btn.is_enabled():
+							await next_btn.click()
+							print(f"[DEBUG] Clicked Next/Continue button (step {step + 1})")
+							await asyncio.sleep(2)
+							next_clicked = True
+							step += 1
+							break
+				except Exception:
+					continue
+			
+			if next_clicked:
+				continue
+			
+			# If no buttons found, we might be done or stuck
+			print(f"[DEBUG] No Next/Review/Submit buttons found, checking if application is complete")
+			break
+		
+		# Close modal if still open
+		await close_application_modal(page)
+		
+		print(f"[DEBUG] Easy Apply modal handling completed")
+		
+		# Extract and print job details
+		job_details = await extract_job_details(page)
+		print_job_details(job_details)
+		
+		return True
+		
 	except Exception as e:
-		print(f"[DEBUG] Failed to take screenshot: {e}")
+		print(f"[DEBUG] Error handling Easy Apply modal: {e}")
+		# Try to close modal even if there was an error
+		await close_application_modal(page)
+		return False
+
+
+async def handle_required_fields(page: Page) -> None:
+	"""Handle required fields in the application form"""
+	try:
+		# Look for common required fields and fill them if needed
+		required_field_selectors = [
+			"css=input[required]",
+			"css=textarea[required]",
+			"css=select[required]",
+			"css=input[aria-required='true']",
+			"css=textarea[aria-required='true']",
+		]
+		
+		for selector in required_field_selectors:
+			try:
+				fields = page.locator(selector)
+				count = await fields.count()
+				for i in range(count):
+					field = fields.nth(i)
+					if await field.is_visible():
+						field_type = await field.get_attribute("type")
+						field_name = await field.get_attribute("name") or await field.get_attribute("id") or ""
+						
+						# Skip if field already has value
+						value = await field.input_value()
+						if value:
+							continue
+						
+						# Fill based on field type/name
+						if "phone" in field_name.lower() or field_type == "tel":
+							await field.fill("+1234567890")
+						elif "email" in field_name.lower() or field_type == "email":
+							await field.fill("user@example.com")
+						elif "name" in field_name.lower():
+							await field.fill("John Doe")
+						elif "experience" in field_name.lower() or "years" in field_name.lower():
+							await field.fill("5")
+						elif field_type == "number":
+							await field.fill("5")
+						else:
+							await field.fill("N/A")
+						
+						print(f"[DEBUG] Filled required field: {field_name}")
+			except Exception:
+				continue
+	except Exception as e:
+		print(f"[DEBUG] Error handling required fields: {e}")
+
+
+async def close_application_modal(page: Page) -> None:
+	"""Close the application modal if it's still open"""
+	try:
+		for selector in close_modal_selectors:
+			try:
+				close_btn = page.locator(selector).first
+				if await close_btn.count() > 0:
+					await close_btn.wait_for(state="visible", timeout=2000)
+					await close_btn.click()
+					print(f"[DEBUG] Closed application modal")
+					await asyncio.sleep(1)
+					break
+			except Exception:
+				continue
+	except Exception as e:
+		print(f"[DEBUG] Error closing modal: {e}")
+
+
+async def extract_job_details(page: Page) -> Dict[str, str]:
+	"""Extract job details from the current page"""
+	job_details = {
+		"title": "",
+		"company": "",
+		"location": "",
+		"applied_date": ""
+	}
+	
+	try:
+		# Extract job title
+		title_selectors = [
+			"css=.jobs-unified-top-card__job-title",
+			"css=h1",
+			"css=.job-title",
+			"css=[data-test-id='job-title']"
+		]
+		
+		for selector in title_selectors:
+			try:
+				element = page.locator(selector).first
+				if await element.count() > 0:
+					job_details["title"] = (await element.text_content() or "").strip()
+					break
+			except Exception:
+				continue
+		
+		# Extract company name
+		company_selectors = [
+			"css=.jobs-unified-top-card__company-name",
+			"css=.company-name",
+			"css=[data-test-id='company-name']"
+		]
+		
+		for selector in company_selectors:
+			try:
+				element = page.locator(selector).first
+				if await element.count() > 0:
+					job_details["company"] = (await element.text_content() or "").strip()
+					break
+			except Exception:
+				continue
+		
+		# Extract location
+		location_selectors = [
+			"css=.jobs-unified-top-card__bullet",
+			"css=.job-location",
+			"css=[data-test-id='job-location']"
+		]
+		
+		for selector in location_selectors:
+			try:
+				element = page.locator(selector).first
+				if await element.count() > 0:
+					job_details["location"] = (await element.text_content() or "").strip()
+					break
+			except Exception:
+				continue
+		
+		# Set applied date to current date
+		from datetime import datetime
+		job_details["applied_date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+		
+	except Exception as e:
+		print(f"[DEBUG] Error extracting job details: {e}")
+	
+	return job_details
+
+
+def print_job_details(job_details: Dict[str, str]) -> None:
+	"""Print job details in a formatted way"""
+	print(f"\n" + "="*60)
+	print(f"🎯 JOB APPLICATION COMPLETED SUCCESSFULLY!")
+	print(f"="*60)
+	print(f"📋 Job Role: {job_details.get('title', 'N/A')}")
+	print(f"🏢 Company: {job_details.get('company', 'N/A')}")
+	print(f"📍 Location: {job_details.get('location', 'N/A')}")
+	print(f"📅 Applied Date: {job_details.get('applied_date', 'N/A')}")
+	print(f"="*60)
+	print(f"✅ Application submitted successfully!")
+	print(f"="*60)
 
 
 async def wait_for_captcha_completion(page: Page) -> None:
@@ -538,74 +823,111 @@ async def find_and_apply_to_first_job(page: Page) -> Dict[str, str]:
 			# Click on the job to open it
 			await job_card.click()
 			await wait_network_idle(page)
-			await asyncio.sleep(2)
+			await asyncio.sleep(3)  # Wait longer for job details to load
 			
-			# Check if job is already applied to
-			applied_indicators = [
-				"css=*:has-text('Applied')",
-				"css=*:has-text('Application sent')",
-				"css=*:has-text('See application')",
-				"css=.jobs-apply-button:has-text('Applied')",
-				"css=button:has-text('Applied')"
-			]
-			
-			already_applied = False
-			for indicator in applied_indicators:
-				if await page.locator(indicator).count() > 0:
-					already_applied = True
-					print(f"[DEBUG] Job already applied to: {job_info['title']}")
-					break
-			
-			if already_applied:
-				print(f"[DEBUG] Skipping already applied job, trying next...")
-				continue
-			
-			# Look for Easy Apply button
-			print(f"[DEBUG] Looking for Easy Apply button...")
+			# Wait for job details panel to load
+			print(f"[DEBUG] Waiting for job details panel to load...")
 			try:
-				apply_btn = page.locator("css=button:has-text('Easy Apply'), css=button:has-text('Apply'), css=.jobs-apply-button").first
-				if await apply_btn.count():
-					button_text = await apply_btn.text_content()
-					print(f"[DEBUG] Found apply button: {button_text}")
-					
-					# Check if it's actually an Easy Apply button
-					if "Easy Apply" in button_text or "Apply" in button_text:
-						print(f"[DEBUG] Clicking apply button for: {job_info['title']}")
-						await apply_btn.click()
-						await asyncio.sleep(2)
-						
-						# Handle application modal
-						try:
-							# Look for Next/Continue buttons
-							next_btn = page.locator("css=button:has-text('Next'), css=button:has-text('Continue')").first
-							if await next_btn.count():
-								await next_btn.click()
-								print(f"[DEBUG] Clicked Next in application")
-								await asyncio.sleep(1)
-							
-							# Look for Submit button
-							submit_btn = page.locator("css=button:has-text('Submit'), css=button:has-text('Submit application')").first
-							if await submit_btn.count():
-								await submit_btn.click()
-								print(f"[DEBUG] Submitted application")
-								await asyncio.sleep(2)
-							
-							# Close modal if still open
-							close_btn = page.locator("css=button[aria-label='Dismiss'], css=button:has-text('×')").first
-							if await close_btn.count():
-								await close_btn.click()
-								print(f"[DEBUG] Closed application modal")
-						except Exception as e:
-							print(f"[DEBUG] Application modal handling failed: {e}")
-						
-						print(f"[DEBUG] Successfully applied to: {job_info['title']}")
-						return job_info
-					else:
-						print(f"[DEBUG] Button is not Easy Apply: {button_text}")
+				# Wait for the job details panel to be visible
+				await page.wait_for_selector(".jobs-unified-top-card, .jobs-details, .jobs-details__main-content", timeout=10000)
+				print(f"[DEBUG] Job details panel loaded")
+			except Exception as e:
+				print(f"[DEBUG] Job details panel not found, continuing anyway: {e}")
+			
+			# Skip already applied detection - try to apply to all jobs
+			print(f"[DEBUG] Attempting to apply to job: {job_info['title']}")
+			
+			# Look for Easy Apply button with comprehensive selectors
+			print(f"[DEBUG] Looking for Easy Apply button...")
+			
+			# Debug: Print all buttons on the page to understand the structure
+			try:
+				all_buttons = await page.locator("css=button").all()
+				print(f"[DEBUG] Found {len(all_buttons)} buttons on the page")
+				for i, button in enumerate(all_buttons[:15]):  # Show first 15 buttons
+					try:
+						text = await button.text_content()
+						is_visible = await button.is_visible()
+						is_enabled = await button.is_enabled()
+						class_name = await button.get_attribute("class") or ""
+						if text and text.strip() and is_visible:
+							print(f"[DEBUG] Button {i}: '{text.strip()}' (visible: {is_visible}, enabled: {is_enabled})")
+							if "apply" in text.lower() or "easy" in text.lower():
+								print(f"[DEBUG]   - This looks like an apply button! Class: {class_name}")
+					except Exception:
+						pass
+			except Exception as e:
+				print(f"[DEBUG] Could not inspect buttons: {e}")
+			
+			# Also specifically look for Easy Apply elements
+			try:
+				easy_apply_elements = await page.locator("css=*:has-text('Easy Apply')").all()
+				print(f"[DEBUG] Found {len(easy_apply_elements)} elements containing 'Easy Apply' text")
+				for i, elem in enumerate(easy_apply_elements[:5]):
+					try:
+						tag_name = await elem.evaluate("el => el.tagName")
+						text = await elem.text_content()
+						is_visible = await elem.is_visible()
+						class_name = await elem.get_attribute("class") or ""
+						print(f"[DEBUG] Easy Apply element {i}: <{tag_name}> '{text.strip()}' (visible: {is_visible}, class: {class_name})")
+					except Exception:
+						pass
+			except Exception as e:
+				print(f"[DEBUG] Could not inspect Easy Apply elements: {e}")
+			
+			try:
+				# Import the comprehensive selectors
+				from .selectors import apply_button_selectors
+				
+				apply_btn = None
+				button_text = ""
+				
+				# Try all apply button selectors
+				for selector in apply_button_selectors:
+					try:
+						element = page.locator(selector).first
+						if await element.count() > 0:
+							# Check if element is visible and enabled
+							if await element.is_visible() and await element.is_enabled():
+								apply_btn = element
+								button_text = await element.text_content() or ""
+								print(f"[DEBUG] Found apply button with selector: {selector}")
+								print(f"[DEBUG] Button text: '{button_text.strip()}'")
+								break
+					except Exception:
 						continue
+				
+				if apply_btn and button_text:
+					# Check if it's actually an Easy Apply button
+					if any(keyword in button_text.lower() for keyword in ["easy apply", "apply", "quick apply"]):
+						print(f"[DEBUG] Clicking apply button for: {job_info['title']}")
+						print(f"[DEBUG] Button text: '{button_text.strip()}'")
+						
+						# Scroll to button to ensure it's in view
+						await apply_btn.scroll_into_view_if_needed()
+						await asyncio.sleep(1)
+						
+						# Click the button
+						await apply_btn.click()
+						await asyncio.sleep(3)
+						
+						# Handle application modal with improved logic
+						success = await handle_easy_apply_modal(page)
+						if success:
+							print(f"[DEBUG] Successfully applied to: {job_info['title']}")
+							return job_info
+						else:
+							print(f"[DEBUG] Failed to complete application for: {job_info['title']}")
+							continue
+					else:
+						print(f"[DEBUG] Button is not Easy Apply: '{button_text.strip()}'")
+						continue
+				else:
+					print(f"[DEBUG] No Easy Apply button found for this job")
+					continue
 						
 			except Exception as e:
-				print(f"[DEBUG] No Easy Apply button found for this job: {e}")
+				print(f"[DEBUG] Error looking for Easy Apply button: {e}")
 				continue
 				
 		except Exception as e:

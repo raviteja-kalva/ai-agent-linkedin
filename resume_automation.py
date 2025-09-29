@@ -46,9 +46,6 @@ async def resume_automation():
             
         except Exception as e:
             print(f"[ERROR] Automation failed: {e}")
-            # Take a debug screenshot
-            await page.screenshot(path="debug_error_resume.png")
-            print(f"[DEBUG] Error screenshot saved: debug_error_resume.png")
             
             # Keep browser open for manual inspection
             print(f"[INFO] Keeping browser open for manual inspection...")
